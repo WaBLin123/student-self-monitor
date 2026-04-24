@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>自我監控系統（最終整合版）</title>
+
+<style>
+body { font-family:"Microsoft JhengHei"; text-align:center; background:#f5f7fa; }
+table { border-collapse: collapse; margin:20px auto; background:white; width:90%; }
+td, th { border:1px solid #ccc; padding:10px; font-size:14px; }
+th { background:#4CAF50; color:white; }
+button { padding:8px; margin:3px; border:none; border-radius:5px; cursor:pointer;}
+.in { background:#4CAF50; color:white;}
+.out { background:#f44336; color:white;}
+select { width:90%; padding:5px; }
+.checkbox-group { text-align:left; }
+.time-box { white-space: pre-line; }
+#message { font-size:18px; font-weight:bold; margin:10px;}
+#analysis { white-space: pre-line; background:#fff; padding:10px; margin:10px;}
+</style>
+
+</head>
+
+<body>
+
+<h2>📋 今日自我監控系統（整合版）</h2>
+
+<p>👤 學生姓名：
+<input type="text" id="studentName">
+</p>
+
+<div id="today"></div>
+
+<button onclick="exportCSV()">📥 匯出紀錄</button>
+<button onclick="runAnalysis()">📊 今日分析</button>
+
+<div id="message"></div>
+<div id="analysis"></div>
+
+<table id="table"></table>
+
+<script>
+
+// ⭐今天
+const days = ["日","一","二","三","四","五","六"];
+let todayIndex = new Date().getDay();
+let todayName = "週" + days[todayIndex];
+
+document.getElementById("today").innerText = "今天：" + todayName;
+
+// ⭐課表
+const schedule = [
+["早自習","打卡"],
+["第一節","學習"],
+["下課","打卡"],
+["第二節","學習"],
+["下課","打卡"],
+["第三節","學習"],
+["下課","打卡"],
+["第四節","學習"],
+["午餐/午休","打卡"],
+["第五節","學習"],
+["下課","打卡"],
+["第六節","學習"],
+["掃地","打卡"],
+["第七節","學習"]
+];
+
+// ⭐自主活動（已整合你所有調整）
+const selfPeriods = [
+"週一_第七節",
+"週三_第五節",
+"週三_第六節",
+"週三_第七節",
+"週四_第三節",
+"週四_第七節"
+];
+
+let records = {};
+
+// ⭐時間
+function now(){ return new Date().toLocaleTimeString(); }
+
+// ⭐簽到
+function checkIn(id,period){
+if(!records[id]) records[id]={period};
+
+records[id].in = now();
+document.getElementById(id).innerText = "簽到：" + records[id].in;
+
+if(period.includes("午餐")){
+document.getElementById("message").innerText="💊 記得用藥";
+}else{
+document.getElementById("message").innerText="👍 已簽到";
+}
+}
+
+// ⭐簽退＋停留時間
+function checkOut(id){
+if(!records[id]) return;
+
+records[id].out = now();
+
+let inTime = new Date("1970/01/01 " + records[id].in);
+let outTime = new Date("1970/01/01 " + records[id].out);
+
+let diff = Math.round((outTime - inTime)/60000);
+
+records[id].stay = diff;
+
+document.getElementById(id).innerText +=
+"\n簽退：" + records[id].out +
+"\n⏱️ " + diff + " 分鐘";
+}
+
+// ⭐學習檢核
+function saveCheck(id){
+let done =
+document.getElementById(id+"_1").checked &&
+document.getElementById(id+"_2").checked &&
+document.getElementById(id+"_3").checked;
+
+records[id] = {type:"學習",done};
+
+document.getElementById("message").innerText =
+done ? "👍 完成學習" : "⚠ 尚未完成";
+}
+
+// ⭐自主活動＋回饋
+function saveActivity(id){
+let act=document.getElementById(id).value;
+
+let feedback="";
+if(act==="寫評量") feedback="📝 有在努力完成任務";
+if(act==="織圍巾") feedback="🧶 情緒穩定很好";
+if(act==="晤談") feedback="💬 願意溝通很棒";
+if(act==="放空") feedback="😌 有休息很好";
+
+records[id] = {type:"活動",content:act};
+
+document.getElementById("message").innerText = feedback;
+}
+
+// ⭐分析
+function runAnalysis(){
+
+let list = Object.values(records);
+
+let stayList = list.filter(r=>r.stay);
+
+let avg = stayList.length ? Math.round(stayList.reduce((a,b)=>a+b.stay,0)/stayList.length) : 0;
+
+let early = stayList.filter(r=>r.stay < 3).length;
+let long = stayList.filter(r=>r.stay > 10).length;
+let missing = list.filter(r=>r.type==="打卡" && !r.out).length;
+
+let text = `
+【今日分析】
+
+平均停留：${avg} 分鐘
+⚠ 提前離開：${early}次
+🐢 停留過久：${long}次
+❗ 未簽退：${missing}次
+
+【建議】
+建議持續透過結構化下課流程，
+協助學生建立穩定的時間管理與轉換能力。
+`;
+
+document.getElementById("analysis").innerText = text;
+}
+
+// ⭐匯出
+function exportCSV(){
+let csv="類型,簽到,簽退,停留時間,內容\n";
+
+Object.values(records).forEach(r=>{
+csv+=`${r.type||""},${r.in||""},${r.out||""},${r.stay||""},${r.content||""}\n`;
+});
+
+let blob=new Blob(["\uFEFF"+csv],{type:"text/csv;charset=utf-8;"});
+let link=document.createElement("a");
+link.href=URL.createObjectURL(blob);
+link.download="今日紀錄.csv";
+link.click();
+}
+
+// ⭐建表
+let table = document.getElementById("table");
+
+table.innerHTML = "<tr><th>節次</th><th>內容</th></tr>";
+
+for(let i=0;i<schedule.length;i++){
+
+let period = schedule[i][0];
+let type = schedule[i][1];
+let key = todayName + "_" + period;
+
+let row = "<tr><td>"+period+"</td>";
+
+if(selfPeriods.includes(key)){
+row += `<td>
+<select id="s${i}">
+<option value="">選擇</option>
+<option value="寫評量">寫評量</option>
+<option value="織圍巾">織圍巾</option>
+<option value="晤談">晤談</option>
+<option value="放空">放空</option>
+</select>
+<button onclick="saveActivity('s${i}')">✔</button>
+</td>`;
+}
+
+else if(type=="打卡"){
+row += `<td class="time-box">
+<div id="c${i}"></div>
+<button class="in" onclick="checkIn('c${i}','${period}')">簽到</button>
+<button class="out" onclick="checkOut('c${i}')">簽退</button>
+</td>`;
+}
+
+else{
+row += `<td class="checkbox-group">
+<input type="checkbox" id="c${i}_1">完成<br>
+<input type="checkbox" id="c${i}_2">未玩鬧<br>
+<input type="checkbox" id="c${i}_3">遵守<br>
+<button onclick="saveCheck('c${i}')">✔</button>
+</td>`;
+}
+
+row += "</tr>";
+table.innerHTML += row;
+}
+
+</script>
+
+</body>
+</html>
