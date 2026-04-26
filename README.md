@@ -41,10 +41,35 @@
 
 右上角有 `同步 Google Sheet` 按鈕，會將目前模式可見資料送到 Apps Script Web App。
 
+### 同步狀態燈號
+
+同步按鈕旁有燈號與文字狀態：
+
+- 灰燈：`未同步`
+- 黃燈：`等待同步` / `同步中`
+- 綠燈：`同步成功`
+- 紅燈：`同步失敗`
+
+### 自動同步機制
+
+- 使用者有操作會啟動同步倒數（預設約 3 秒）
+- 若倒數期間又有新操作，會重設同一個計時器（debounce）
+- 同一時間只會有一個同步請求（避免競爭）
+- 若同步進行中又有新操作，會在本次完成後再排下一次同步
+- 觸發操作包含：
+  - 簽到 / 簽退 / 服藥
+  - 學習檢核 checkbox 勾選變更
+  - 抽離活動 select 選項變更
+  - 按 `✔` 儲存學習檢核或抽離活動
+
 ### 前端設定（`index.html`）
 
 - `GOOGLE_SHEET_WEB_APP_URL`：Apps Script Web App URL
-- `GOOGLE_SHEET_API_KEY`：同步用 API key（目前為 `YOUR_SIMPLE_KEY`）
+- `GOOGLE_SHEET_API_KEY`：同步用 API key（預設 `YOUR_SIMPLE_KEY`）
+- `GOOGLE_SHEET_API_KEY_STORAGE_KEY`：使用者輸入 key 的 localStorage key
+- `AUTO_SYNC_DELAY_MS`：自動同步延遲毫秒數
+
+畫面上 `當週` 右邊有 `設定 API Key` 按鈕，可讓使用者輸入並儲存 API key（重新整理後保留）。
 
 送出的 payload 格式：
 
@@ -78,7 +103,8 @@
 
 1. 用瀏覽器開啟 `index.html`
 2. 左上切換 `當天` 或 `當週`
-3. 依節次填寫紀錄
+3. 若需要，按 `設定 API Key` 輸入 Google Apps Script 驗證 key
+4. 依節次填寫紀錄（會自動排程同步）
 4. 右上可選：
    - `匯出資料`（CSV）
    - `同步 Google Sheet`
@@ -92,6 +118,7 @@
 - `selfPeriods`：哪些 `週X_節次` 顯示抽離活動
 - `GOOGLE_SHEET_WEB_APP_URL`：雲端同步端點
 - `GOOGLE_SHEET_API_KEY`：同步金鑰
+- `AUTO_SYNC_DELAY_MS`：自動同步延遲
 
 ## 目前限制
 

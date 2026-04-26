@@ -22,6 +22,9 @@
       }
       .top-actions {
         justify-self: end;
+        display: flex;
+        align-items: center;
+        gap: 8px;
       }
       .top-filters {
         justify-self: start;
@@ -90,6 +93,11 @@
       .view-btn.active {
         background: #0d6efd;
       }
+      .key-btn {
+        background: #5c6bc0;
+        color: white;
+        padding: 8px 12px;
+      }
       .sync {
         background: #009688;
         color: white;
@@ -98,6 +106,31 @@
       .sync:disabled {
         background: #95c8c2;
         cursor: not-allowed;
+      }
+      .sync-status {
+        display: inline-flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 6px;
+        font-size: 13px;
+        color: #333;
+        min-width: 92px;
+        text-align: right;
+      }
+      .sync-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: #9e9e9e;
+      }
+      .sync-status.success .sync-dot {
+        background: #2e7d32;
+      }
+      .sync-status.error .sync-dot {
+        background: #d32f2f;
+      }
+      .sync-status.loading .sync-dot {
+        background: #f9a825;
       }
 
       select {
@@ -135,9 +168,16 @@
         >
           當週
         </button>
+        <button class="key-btn" onclick="setGoogleSheetApiKey()">
+          設定 API Key
+        </button>
       </div>
       <h2>📊 一週課表（視覺化＋時間）</h2>
       <div class="top-actions">
+        <div id="syncStatus" class="sync-status">
+          <span class="sync-dot"></span>
+          <span id="syncStatusText">未同步</span>
+        </div>
         <button id="btnSync" class="sync" onclick="syncToGoogleSheet()">
           同步 Google Sheet
         </button>
@@ -185,10 +225,16 @@
       let records = {};
       const STORAGE_KEY = "studentSelfMonitorState_v1";
       const VIEW_MODE_KEY = "studentSelfMonitorViewMode_v1";
-      const GOOGLE_SHEET_API_KEY = "YOUR_SIMPLE_KEY";
+      const GOOGLE_SHEET_API_KEY_STORAGE_KEY =
+        "studentSelfMonitorGoogleApiKey_v1";
+      let GOOGLE_SHEET_API_KEY = "YOUR_SIMPLE_KEY";
       const GOOGLE_SHEET_WEB_APP_URL =
         "https://script.google.com/macros/s/AKfycbzUUXNikvzgcXBcBkCsmuPZS0Kaf8LPIuHZ0VW-O8Ce4L7bvZ6MGU1u7hpIe0m4RDh8/exec";
+      const AUTO_SYNC_DELAY_MS = 3000;
       let currentViewMode = "week";
+      let autoSyncTimerId = null;
+      let isSyncInProgress = false;
+      let pendingSyncAfterCurrent = false;
 
       // ⭐時間
       function getNow() {
@@ -303,6 +349,20 @@
         renderTable();
       }
 
+      function setGoogleSheetApiKey() {
+        const input = prompt(
+          "請輸入 GOOGLE_SHEET_API_KEY",
+          GOOGLE_SHEET_API_KEY || "",
+        );
+        if (input === null) return;
+        GOOGLE_SHEET_API_KEY = input.trim();
+        localStorage.setItem(
+          GOOGLE_SHEET_API_KEY_STORAGE_KEY,
+          GOOGLE_SHEET_API_KEY,
+        );
+        alert("API Key 已更新");
+      }
+
       function hasNoClassToday() {
         return currentViewMode === "today" && getVisibleDays().length === 0;
       }
@@ -317,6 +377,27 @@
         const syncBtn = document.getElementById("btnSync");
         if (!syncBtn) return;
         syncBtn.disabled = hasNoClassToday();
+      }
+
+      function setSyncStatus(status, text) {
+        const statusEl = document.getElementById("syncStatus");
+        const textEl = document.getElementById("syncStatusText");
+        if (!statusEl || !textEl) return;
+        statusEl.classList.remove("success", "error", "loading");
+        if (status) statusEl.classList.add(status);
+        textEl.innerText = text;
+      }
+
+      function scheduleAutoSync() {
+        if (hasNoClassToday()) return;
+        if (autoSyncTimerId) {
+          clearTimeout(autoSyncTimerId);
+        }
+        setSyncStatus("loading", "等待同步");
+        autoSyncTimerId = setTimeout(() => {
+          autoSyncTimerId = null;
+          syncToGoogleSheet({ silent: true });
+        }, AUTO_SYNC_DELAY_MS);
       }
 
       function loadFromLocalStorage() {
@@ -395,6 +476,7 @@
         records[id].in = now();
         renderTimeBox(id);
         saveToLocalStorage();
+        scheduleAutoSync();
       }
 
       // ⭐簽退
@@ -406,6 +488,7 @@
 
         document.getElementById(id).parentElement.classList.add("normal");
         saveToLocalStorage();
+        scheduleAutoSync();
       }
 
       function takeMedicine(id) {
@@ -413,6 +496,7 @@
         records[id].med = now();
         renderTimeBox(id);
         saveToLocalStorage();
+        scheduleAutoSync();
       }
 
       function exportTableData() {
@@ -613,16 +697,33 @@
         return rows;
       }
 
-      async function syncToGoogleSheet() {
+      async function syncToGoogleSheet(options = {}) {
+        const { silent = false } = options;
+
         if (hasNoClassToday()) {
-          alert("今天是週末，無課堂資料可同步。");
+          setSyncStatus("error", "同步失敗");
+          if (!silent) {
+            alert("今天是週末，無課堂資料可同步。");
+          }
           return;
+        }
+
+        if (isSyncInProgress) {
+          pendingSyncAfterCurrent = true;
+          return;
+        }
+
+        if (autoSyncTimerId) {
+          clearTimeout(autoSyncTimerId);
+          autoSyncTimerId = null;
         }
 
         const syncBtn = document.getElementById("btnSync");
         const originalText = syncBtn.innerText;
+        isSyncInProgress = true;
         syncBtn.disabled = true;
         syncBtn.innerText = "同步中...";
+        setSyncStatus("loading", "同步中");
 
         try {
           const rows = getSyncRows();
@@ -644,21 +745,32 @@
           }
 
           if (response.ok && (result.ok || result.statusCode === 200)) {
-            alert(`同步成功，共 ${rows.length} 筆。`);
+            setSyncStatus("success", "同步成功");
           } else {
-            alert(
-              "同步失敗：請確認 Apps Script 已部署為可匿名存取，且 doPost 可接收 rows。\n" +
-                (result.error || text || response.status),
-            );
+            setSyncStatus("error", "同步失敗");
+            if (!silent) {
+              alert(
+                "同步失敗：請確認 Apps Script 已部署為可匿名存取，且 doPost 可接收 rows。\n" +
+                  (result.error || text || response.status),
+              );
+            }
           }
         } catch (error) {
-          alert(
-            "同步失敗：可能是 Web App 權限或 CORS 設定問題，請檢查部署權限。\n" +
-              error,
-          );
+          setSyncStatus("error", "同步失敗");
+          if (!silent) {
+            alert(
+              "同步失敗：可能是 Web App 權限或 CORS 設定問題，請檢查部署權限。\n" +
+                error,
+            );
+          }
         } finally {
+          isSyncInProgress = false;
           syncBtn.innerText = originalText;
           updateSyncButtonState();
+          if (pendingSyncAfterCurrent) {
+            pendingSyncAfterCurrent = false;
+            scheduleAutoSync();
+          }
         }
       }
 
@@ -679,6 +791,7 @@
 
         if (shouldSave) {
           saveToLocalStorage();
+          scheduleAutoSync();
         }
       }
 
@@ -686,6 +799,17 @@
       function saveActivity(id) {
         document.getElementById(id).parentElement.classList.add("pullout");
         saveToLocalStorage();
+        scheduleAutoSync();
+      }
+
+      function onCheckInputChange() {
+        saveToLocalStorage();
+        scheduleAutoSync();
+      }
+
+      function onSelectInputChange() {
+        saveToLocalStorage();
+        scheduleAutoSync();
       }
 
       // ⭐建表
@@ -731,7 +855,7 @@
             if (selfPeriods.includes(key)) {
               cellClass = "pullout";
               row += `<td class="${cellClass}">
-<select id="s${i}${dayIndex}">
+<select id="s${i}${dayIndex}" onchange="onSelectInputChange()">
 <option value="">選擇</option>
 <option>寫評量</option>
 <option>織圍巾</option>
@@ -754,9 +878,9 @@ ${medicineButton}
 </td>`;
             } else {
               row += `<td class="${cellClass}">
-<input type="checkbox" id="${id}_1">完成課堂學習活動<br>
-<input type="checkbox" id="${id}_2">未與同學玩鬧<br>
-<input type="checkbox" id="${id}_3">遵守教師指令<br>
+<input type="checkbox" id="${id}_1" onchange="onCheckInputChange()">完成課堂學習活動<br>
+<input type="checkbox" id="${id}_2" onchange="onCheckInputChange()">未與同學玩鬧<br>
+<input type="checkbox" id="${id}_3" onchange="onCheckInputChange()">遵守教師指令<br>
 <button onclick="saveCheck('${id}')">✔</button>
 </td>`;
             }
@@ -775,6 +899,12 @@ ${medicineButton}
       const savedViewMode = localStorage.getItem(VIEW_MODE_KEY);
       if (savedViewMode === "today" || savedViewMode === "week") {
         currentViewMode = savedViewMode;
+      }
+      const savedApiKey = localStorage.getItem(
+        GOOGLE_SHEET_API_KEY_STORAGE_KEY,
+      );
+      if (savedApiKey !== null) {
+        GOOGLE_SHEET_API_KEY = savedApiKey;
       }
 
       renderTable();
