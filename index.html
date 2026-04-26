@@ -224,6 +224,27 @@
         return dayMap[new Date().getDay()];
       }
 
+      function getDateTextForDay(dayLabel) {
+        const today = new Date();
+        const todayJsDay = today.getDay();
+        const mondayOffset = todayJsDay === 0 ? -6 : 1 - todayJsDay;
+        const monday = new Date(today);
+        monday.setHours(0, 0, 0, 0);
+        monday.setDate(today.getDate() + mondayOffset);
+
+        const dayIndex = days.indexOf(dayLabel);
+        const target = new Date(monday);
+        target.setDate(monday.getDate() + dayIndex);
+
+        const month = target.getMonth() + 1;
+        const date = target.getDate();
+        return `${month}/${date}`;
+      }
+
+      function getDayHeaderText(dayLabel) {
+        return `${dayLabel} ${getDateTextForDay(dayLabel)}`;
+      }
+
       function getVisibleDays() {
         if (currentViewMode === "today") {
           const today = getTodayLabel();
@@ -415,7 +436,7 @@
             }
 
             rows.push([
-              i === 0 ? day : "",
+              i === 0 ? getDayHeaderText(day) : "",
               period,
               rowType,
               record.in || "",
@@ -485,7 +506,9 @@
 
         // 表頭
         let header = "<tr><th>節次</th>";
-        visibleDays.forEach((d) => (header += "<th>" + d + "</th>"));
+        visibleDays.forEach(
+          (d) => (header += "<th>" + getDayHeaderText(d) + "</th>"),
+        );
         header += "</tr>";
 
         table.innerHTML = header;
