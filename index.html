@@ -1,238 +1,560 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh-TW">
-<head>
-<meta charset="UTF-8">
-<title>自我監控系統（最終整合版）</title>
+  <head>
+    <meta charset="UTF-8" />
+    <title>自我監控表</title>
 
-<style>
-body { font-family:"Microsoft JhengHei"; text-align:center; background:#f5f7fa; }
-table { border-collapse: collapse; margin:20px auto; background:white; width:90%; }
-td, th { border:1px solid #ccc; padding:10px; font-size:14px; }
-th { background:#4CAF50; color:white; }
-button { padding:8px; margin:3px; border:none; border-radius:5px; cursor:pointer;}
-.in { background:#4CAF50; color:white;}
-.out { background:#f44336; color:white;}
-select { width:90%; padding:5px; }
-.checkbox-group { text-align:left; }
-.time-box { white-space: pre-line; }
-#message { font-size:18px; font-weight:bold; margin:10px;}
-#analysis { white-space: pre-line; background:#fff; padding:10px; margin:10px;}
-</style>
+    <style>
+      body {
+        font-family: "Microsoft JhengHei";
+        text-align: center;
+        background: #f5f7fa;
+      }
+      .top-bar {
+        display: grid;
+        grid-template-columns: 1fr auto 1fr;
+        align-items: center;
+        width: 95%;
+        margin: 20px auto 0;
+      }
+      .top-bar h2 {
+        margin: 0;
+      }
+      .top-actions {
+        justify-self: end;
+      }
+      .top-filters {
+        justify-self: start;
+      }
 
-</head>
+      table {
+        border-collapse: collapse;
+        margin: 20px auto;
+        width: 95%;
+      }
+      td,
+      th {
+        border: 1px solid #ccc;
+        padding: 10px;
+        font-size: 13px;
+      }
 
-<body>
+      th {
+        background: #333;
+        color: white;
+      }
 
-<h2>📋 今日自我監控系統（整合版）</h2>
+      .normal {
+        background: #e8f5e9;
+      } /* 綠 */
+      .pullout {
+        background: #fff3cd;
+      } /* 黃 */
+      .warning {
+        background: #f8d7da;
+      } /* 紅 */
 
-<p>👤 學生姓名：
-<input type="text" id="studentName">
-</p>
+      button {
+        padding: 5px;
+        margin: 2px;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+      }
+      .in {
+        background: #4caf50;
+        color: white;
+      }
+      .out {
+        background: #f44336;
+        color: white;
+      }
+      .med {
+        background: #1976d2;
+        color: white;
+      }
+      .export {
+        background: #6f42c1;
+        color: white;
+        padding: 8px 12px;
+      }
+      .view-btn {
+        background: #9aa0a6;
+        color: white;
+        padding: 8px 12px;
+      }
+      .view-btn.active {
+        background: #0d6efd;
+      }
 
-<div id="today"></div>
+      select {
+        width: 90%;
+      }
 
-<button onclick="exportCSV()">📥 匯出紀錄</button>
-<button onclick="runAnalysis()">📊 今日分析</button>
+      .time-box {
+        white-space: pre-line;
+        font-size: 12px;
+      }
+      .time-actions {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        text-align: center;
+        gap: 6px;
+        margin-top: 6px;
+      }
+      .time-actions button {
+        flex: 1;
+      }
+    </style>
+  </head>
 
-<div id="message"></div>
-<div id="analysis"></div>
+  <body>
+    <div class="top-bar">
+      <div class="top-filters">
+        <button id="btnToday" class="view-btn" onclick="setViewMode('today')">
+          當天
+        </button>
+        <button
+          id="btnWeek"
+          class="view-btn active"
+          onclick="setViewMode('week')"
+        >
+          當週
+        </button>
+      </div>
+      <h2>📊 一週課表（視覺化＋時間）</h2>
+      <div class="top-actions">
+        <button class="export" onclick="exportTableData()">匯出資料</button>
+      </div>
+    </div>
 
-<table id="table"></table>
+    <table id="table"></table>
 
-<script>
+    <script>
+      const days = ["週一", "週二", "週三", "週四", "週五", "週六", "週日"];
 
-// ⭐今天
-const days = ["日","一","二","三","四","五","六"];
-let todayIndex = new Date().getDay();
-let todayName = "週" + days[todayIndex];
+      const schedule = [
+        ["早自習", "打卡"],
+        ["第一節", "學習"],
+        ["下課", "打卡"],
+        ["第二節", "學習"],
+        ["下課", "打卡"],
+        ["第三節", "學習"],
+        ["下課", "打卡"],
+        ["第四節", "學習"],
+        ["午餐/午休", "打卡"],
+        ["第五節", "學習"],
+        ["下課", "打卡"],
+        ["第六節", "學習"],
+        ["掃地", "打卡"],
+        ["第七節", "學習"],
+      ];
 
-document.getElementById("today").innerText = "今天：" + todayName;
+      // ⭐抽離節次
+      const selfPeriods = [
+        "週一_第四節",
+        "週一_第七節",
+        "週三_第五節",
+        "週三_第六節",
+        "週三_第七節",
+        "週四_第一節",
+        "週四_第三節",
+        "週四_第七節",
+        "週五_第六節",
+      ];
 
-// ⭐課表
-const schedule = [
-["早自習","打卡"],
-["第一節","學習"],
-["下課","打卡"],
-["第二節","學習"],
-["下課","打卡"],
-["第三節","學習"],
-["下課","打卡"],
-["第四節","學習"],
-["午餐/午休","打卡"],
-["第五節","學習"],
-["下課","打卡"],
-["第六節","學習"],
-["掃地","打卡"],
-["第七節","學習"]
-];
+      let records = {};
+      const STORAGE_KEY = "studentSelfMonitorState_v1";
+      const VIEW_MODE_KEY = "studentSelfMonitorViewMode_v1";
+      let currentViewMode = "week";
 
-// ⭐自主活動（已整合你所有調整）
-const selfPeriods = [
-"週一_第七節",
-"週三_第五節",
-"週三_第六節",
-"週三_第七節",
-"週四_第三節",
-"週四_第七節"
-];
+      // ⭐時間
+      function now() {
+        return new Date().toLocaleTimeString();
+      }
 
-let records = {};
+      function saveToLocalStorage() {
+        let state = getStoredState();
+        let checks = state.checks || {};
+        let activities = state.activities || {};
 
-// ⭐時間
-function now(){ return new Date().toLocaleTimeString(); }
+        for (let i = 0; i < schedule.length; i++) {
+          let period = schedule[i][0];
 
-// ⭐簽到
-function checkIn(id,period){
-if(!records[id]) records[id]={period};
+          for (let j = 0; j < days.length; j++) {
+            let day = days[j];
+            let key = day + "_" + period;
+            let id = "c" + i + j;
 
-records[id].in = now();
-document.getElementById(id).innerText = "簽到：" + records[id].in;
+            if (selfPeriods.includes(key)) {
+              let selectEl = document.getElementById("s" + i + j);
+              activities["s" + i + j] = selectEl ? selectEl.value : "";
+            } else {
+              let c1 = document.getElementById(id + "_1");
+              let c2 = document.getElementById(id + "_2");
+              let c3 = document.getElementById(id + "_3");
+              if (c1 && c2 && c3) {
+                checks[id] = {
+                  c1: c1.checked,
+                  c2: c2.checked,
+                  c3: c3.checked,
+                };
+              }
+            }
+          }
+        }
 
-if(period.includes("午餐")){
-document.getElementById("message").innerText="💊 記得用藥";
-}else{
-document.getElementById("message").innerText="👍 已簽到";
-}
-}
+        state = { records, checks, activities };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      }
 
-// ⭐簽退＋停留時間
-function checkOut(id){
-if(!records[id]) return;
+      function getStoredState() {
+        let raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return { records: {}, checks: {}, activities: {} };
+        try {
+          return JSON.parse(raw);
+        } catch (e) {
+          return { records: {}, checks: {}, activities: {} };
+        }
+      }
 
-records[id].out = now();
+      function getTodayLabel() {
+        const dayMap = ["週日", "週一", "週二", "週三", "週四", "週五", "週六"];
+        return dayMap[new Date().getDay()];
+      }
 
-let inTime = new Date("1970/01/01 " + records[id].in);
-let outTime = new Date("1970/01/01 " + records[id].out);
+      function getVisibleDays() {
+        if (currentViewMode === "today") {
+          const today = getTodayLabel();
+          return days.includes(today) ? [today] : ["週一"];
+        }
+        return days;
+      }
 
-let diff = Math.round((outTime - inTime)/60000);
+      function updateViewButtons() {
+        const isToday = currentViewMode === "today";
+        document.getElementById("btnToday").classList.toggle("active", isToday);
+        document.getElementById("btnWeek").classList.toggle("active", !isToday);
+      }
 
-records[id].stay = diff;
+      function setViewMode(mode) {
+        currentViewMode = mode;
+        localStorage.setItem(VIEW_MODE_KEY, mode);
+        renderTable();
+      }
 
-document.getElementById(id).innerText +=
-"\n簽退：" + records[id].out +
-"\n⏱️ " + diff + " 分鐘";
-}
+      function loadFromLocalStorage() {
+        let raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return;
 
-// ⭐學習檢核
-function saveCheck(id){
-let done =
-document.getElementById(id+"_1").checked &&
-document.getElementById(id+"_2").checked &&
-document.getElementById(id+"_3").checked;
+        try {
+          let state = JSON.parse(raw);
+          records = state.records || {};
 
-records[id] = {type:"學習",done};
+          for (let i = 0; i < schedule.length; i++) {
+            let period = schedule[i][0];
 
-document.getElementById("message").innerText =
-done ? "👍 完成學習" : "⚠ 尚未完成";
-}
+            for (let j = 0; j < days.length; j++) {
+              let day = days[j];
+              let key = day + "_" + period;
+              let id = "c" + i + j;
 
-// ⭐自主活動＋回饋
-function saveActivity(id){
-let act=document.getElementById(id).value;
+              if (selfPeriods.includes(key)) {
+                let selectId = "s" + i + j;
+                let selectEl = document.getElementById(selectId);
+                if (
+                  selectEl &&
+                  state.activities &&
+                  typeof state.activities[selectId] === "string"
+                ) {
+                  selectEl.value = state.activities[selectId];
+                  if (selectEl.value) {
+                    selectEl.parentElement.classList.add("pullout");
+                  }
+                }
+              } else {
+                let c1 = document.getElementById(id + "_1");
+                let c2 = document.getElementById(id + "_2");
+                let c3 = document.getElementById(id + "_3");
+                if (c1 && c2 && c3 && state.checks && state.checks[id]) {
+                  c1.checked = !!state.checks[id].c1;
+                  c2.checked = !!state.checks[id].c2;
+                  c3.checked = !!state.checks[id].c3;
+                  saveCheck(id, false);
+                }
+              }
 
-let feedback="";
-if(act==="寫評量") feedback="📝 有在努力完成任務";
-if(act==="織圍巾") feedback="🧶 情緒穩定很好";
-if(act==="晤談") feedback="💬 願意溝通很棒";
-if(act==="放空") feedback="😌 有休息很好";
+              if (document.getElementById(id)) {
+                renderTimeBox(id);
+                if (records[id] && records[id].out) {
+                  document
+                    .getElementById(id)
+                    .parentElement.classList.add("normal");
+                }
+              }
+            }
+          }
+        } catch (e) {
+          console.error("讀取 localStorage 失敗：", e);
+        }
+      }
 
-records[id] = {type:"活動",content:act};
+      function renderTimeBox(id) {
+        if (!records[id]) {
+          document.getElementById(id).innerText = "";
+          return;
+        }
 
-document.getElementById("message").innerText = feedback;
-}
+        let lines = [];
+        if (records[id].in) lines.push("簽到：" + records[id].in);
+        if (records[id].out) lines.push("簽退：" + records[id].out);
+        if (records[id].med) lines.push("服藥：" + records[id].med);
 
-// ⭐分析
-function runAnalysis(){
+        document.getElementById(id).innerText = lines.join("\n");
+      }
 
-let list = Object.values(records);
+      // ⭐簽到
+      function checkIn(id) {
+        if (!records[id]) records[id] = {};
+        records[id].in = now();
+        renderTimeBox(id);
+        saveToLocalStorage();
+      }
 
-let stayList = list.filter(r=>r.stay);
+      // ⭐簽退
+      function checkOut(id) {
+        if (!records[id]) return;
 
-let avg = stayList.length ? Math.round(stayList.reduce((a,b)=>a+b.stay,0)/stayList.length) : 0;
+        records[id].out = now();
+        renderTimeBox(id);
 
-let early = stayList.filter(r=>r.stay < 3).length;
-let long = stayList.filter(r=>r.stay > 10).length;
-let missing = list.filter(r=>r.type==="打卡" && !r.out).length;
+        document.getElementById(id).parentElement.classList.add("normal");
+        saveToLocalStorage();
+      }
 
-let text = `
-【今日分析】
+      function takeMedicine(id) {
+        if (!records[id]) records[id] = {};
+        records[id].med = now();
+        renderTimeBox(id);
+        saveToLocalStorage();
+      }
 
-平均停留：${avg} 分鐘
-⚠ 提前離開：${early}次
-🐢 停留過久：${long}次
-❗ 未簽退：${missing}次
+      function exportTableData() {
+        let state = getStoredState();
+        let visibleDays =
+          currentViewMode === "today" ? [getTodayLabel()] : days;
+        let rows = [
+          [
+            "星期",
+            "節次",
+            "類型",
+            "簽到",
+            "簽退",
+            "服藥",
+            "學習完成",
+            "未玩鬧",
+            "遵守教師指令",
+            "活動",
+          ],
+        ];
 
-【建議】
-建議持續透過結構化下課流程，
-協助學生建立穩定的時間管理與轉換能力。
-`;
+        for (let j = 0; j < visibleDays.length; j++) {
+          let day = visibleDays[j];
+          let dayIndex = days.indexOf(day);
+          for (let i = 0; i < schedule.length; i++) {
+            let period = schedule[i][0];
+            let type = schedule[i][1];
+            let key = day + "_" + period;
+            let id = "c" + i + dayIndex;
+            let record = records[id] || {};
 
-document.getElementById("analysis").innerText = text;
-}
+            let rowType = "";
+            let activity = "";
+            let check1 = "";
+            let check2 = "";
+            let check3 = "";
 
-// ⭐匯出
-function exportCSV(){
-let csv="類型,簽到,簽退,停留時間,內容\n";
+            if (selfPeriods.includes(key)) {
+              rowType = "抽離活動";
+              let selectId = "s" + i + dayIndex;
+              let selectEl = document.getElementById(selectId);
+              activity =
+                (selectEl ? selectEl.value : "") ||
+                (state.activities && state.activities[selectId]) ||
+                "";
+            } else if (type == "打卡") {
+              rowType = "打卡";
+            } else {
+              rowType = "學習檢核";
+              let savedChecks = (state.checks && state.checks[id]) || {};
+              let c1 = document.getElementById(id + "_1");
+              let c2 = document.getElementById(id + "_2");
+              let c3 = document.getElementById(id + "_3");
+              check1 = c1
+                ? c1.checked
+                  ? "是"
+                  : "否"
+                : savedChecks.c1
+                  ? "是"
+                  : "否";
+              check2 = c2
+                ? c2.checked
+                  ? "是"
+                  : "否"
+                : savedChecks.c2
+                  ? "是"
+                  : "否";
+              check3 = c3
+                ? c3.checked
+                  ? "是"
+                  : "否"
+                : savedChecks.c3
+                  ? "是"
+                  : "否";
+            }
 
-Object.values(records).forEach(r=>{
-csv+=`${r.type||""},${r.in||""},${r.out||""},${r.stay||""},${r.content||""}\n`;
-});
+            rows.push([
+              i === 0 ? day : "",
+              period,
+              rowType,
+              record.in || "",
+              record.out || "",
+              record.med || "",
+              check1,
+              check2,
+              check3,
+              activity,
+            ]);
+          }
+        }
 
-let blob=new Blob(["\uFEFF"+csv],{type:"text/csv;charset=utf-8;"});
-let link=document.createElement("a");
-link.href=URL.createObjectURL(blob);
-link.download="今日紀錄.csv";
-link.click();
-}
+        let csv = rows
+          .map((row) =>
+            row.map((val) => `"${String(val).replace(/"/g, '""')}"`).join(","),
+          )
+          .join("\n");
 
-// ⭐建表
-let table = document.getElementById("table");
+        let blob = new Blob(["\uFEFF" + csv], {
+          type: "text/csv;charset=utf-8;",
+        });
+        let url = URL.createObjectURL(blob);
+        let a = document.createElement("a");
+        a.href = url;
+        a.download =
+          currentViewMode === "today"
+            ? `${visibleDays[0]}課表紀錄.csv`
+            : "一週課表紀錄.csv";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
 
-table.innerHTML = "<tr><th>節次</th><th>內容</th></tr>";
+      // ⭐學習檢核
+      function saveCheck(id, shouldSave = true) {
+        let done =
+          document.getElementById(id + "_1").checked &&
+          document.getElementById(id + "_2").checked &&
+          document.getElementById(id + "_3").checked;
 
-for(let i=0;i<schedule.length;i++){
+        if (done) {
+          document.getElementById(id).parentElement.classList.add("normal");
+          document.getElementById(id).parentElement.classList.remove("warning");
+        } else {
+          document.getElementById(id).parentElement.classList.remove("normal");
+          document.getElementById(id).parentElement.classList.add("warning");
+        }
 
-let period = schedule[i][0];
-let type = schedule[i][1];
-let key = todayName + "_" + period;
+        if (shouldSave) {
+          saveToLocalStorage();
+        }
+      }
 
-let row = "<tr><td>"+period+"</td>";
+      // ⭐活動
+      function saveActivity(id) {
+        document.getElementById(id).parentElement.classList.add("pullout");
+        saveToLocalStorage();
+      }
 
-if(selfPeriods.includes(key)){
-row += `<td>
-<select id="s${i}">
+      // ⭐建表
+      let table = document.getElementById("table");
+
+      function renderTable() {
+        let visibleDays = getVisibleDays();
+
+        // 表頭
+        let header = "<tr><th>節次</th>";
+        visibleDays.forEach((d) => (header += "<th>" + d + "</th>"));
+        header += "</tr>";
+
+        table.innerHTML = header;
+
+        // 內容
+        for (let i = 0; i < schedule.length; i++) {
+          let period = schedule[i][0];
+          let type = schedule[i][1];
+          let isMedicinePeriod = period == "早自習" || period == "午餐/午休";
+
+          let row = "<tr><td>" + period + "</td>";
+
+          for (let j = 0; j < visibleDays.length; j++) {
+            let day = visibleDays[j];
+            let dayIndex = days.indexOf(day);
+            let key = day + "_" + period;
+            let id = "c" + i + dayIndex;
+
+            let cellClass = "normal";
+
+            // ⭐抽離判斷
+            if (selfPeriods.includes(key)) {
+              cellClass = "pullout";
+              row += `<td class="${cellClass}">
+<select id="s${i}${dayIndex}">
 <option value="">選擇</option>
-<option value="寫評量">寫評量</option>
-<option value="織圍巾">織圍巾</option>
-<option value="晤談">晤談</option>
-<option value="放空">放空</option>
+<option>寫評量</option>
+<option>織圍巾</option>
+<option>晤談</option>
+<option>放空</option>
 </select>
-<button onclick="saveActivity('s${i}')">✔</button>
+<button onclick="saveActivity('s${i}${dayIndex}')">✔</button>
 </td>`;
-}
-
-else if(type=="打卡"){
-row += `<td class="time-box">
-<div id="c${i}"></div>
-<button class="in" onclick="checkIn('c${i}','${period}')">簽到</button>
-<button class="out" onclick="checkOut('c${i}')">簽退</button>
+            } else if (type == "打卡") {
+              let medicineButton = isMedicinePeriod
+                ? `<button class="med" onclick="takeMedicine('${id}')">服藥</button>`
+                : "";
+              row += `<td class="${cellClass} time-box">
+<div id="${id}"></div>
+<div class="time-actions">
+<button class="in" onclick="checkIn('${id}')">簽到</button>
+<button class="out" onclick="checkOut('${id}')">簽退</button>
+${medicineButton}
+</div>
 </td>`;
-}
-
-else{
-row += `<td class="checkbox-group">
-<input type="checkbox" id="c${i}_1">完成<br>
-<input type="checkbox" id="c${i}_2">未玩鬧<br>
-<input type="checkbox" id="c${i}_3">遵守<br>
-<button onclick="saveCheck('c${i}')">✔</button>
+            } else {
+              row += `<td class="${cellClass}">
+<input type="checkbox" id="${id}_1">完成課堂學習活動<br>
+<input type="checkbox" id="${id}_2">未與同學玩鬧<br>
+<input type="checkbox" id="${id}_3">遵守教師指令<br>
+<button onclick="saveCheck('${id}')">✔</button>
 </td>`;
-}
+            }
+          }
 
-row += "</tr>";
-table.innerHTML += row;
-}
+          row += "</tr>";
+          table.innerHTML += row;
+        }
 
-</script>
+        updateViewButtons();
+        loadFromLocalStorage();
+      }
 
-</body>
+      const savedViewMode = localStorage.getItem(VIEW_MODE_KEY);
+      if (savedViewMode === "today" || savedViewMode === "week") {
+        currentViewMode = savedViewMode;
+      }
+
+      renderTable();
+    </script>
+  </body>
 </html>
