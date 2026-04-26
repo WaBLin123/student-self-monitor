@@ -90,6 +90,15 @@
       .view-btn.active {
         background: #0d6efd;
       }
+      .sync {
+        background: #009688;
+        color: white;
+        padding: 8px 12px;
+      }
+      .sync:disabled {
+        background: #95c8c2;
+        cursor: not-allowed;
+      }
 
       select {
         width: 90%;
@@ -129,6 +138,9 @@
       </div>
       <h2>📊 一週課表（視覺化＋時間）</h2>
       <div class="top-actions">
+        <button id="btnSync" class="sync" onclick="syncToGoogleSheet()">
+          同步 Google Sheet
+        </button>
         <button id="btnExport" class="export" onclick="exportTableData()">
           匯出資料
         </button>
@@ -173,6 +185,9 @@
       let records = {};
       const STORAGE_KEY = "studentSelfMonitorState_v1";
       const VIEW_MODE_KEY = "studentSelfMonitorViewMode_v1";
+      const GOOGLE_SHEET_API_KEY = "YOUR_SIMPLE_KEY";
+      const GOOGLE_SHEET_WEB_APP_URL =
+        "https://script.google.com/macros/s/AKfycbwxgnb69tZ8YydkYe679ew6u6keF1bRoEu1vo4dzcIFUljV_6C9HdBXSFLeH_DsmEAK/exec";
       let currentViewMode = "week";
 
       // ⭐時間
@@ -283,6 +298,12 @@
         const exportBtn = document.getElementById("btnExport");
         if (!exportBtn) return;
         exportBtn.disabled = hasNoClassToday();
+      }
+
+      function updateSyncButtonState() {
+        const syncBtn = document.getElementById("btnSync");
+        if (!syncBtn) return;
+        syncBtn.disabled = hasNoClassToday();
       }
 
       function loadFromLocalStorage() {
@@ -496,6 +517,138 @@
         URL.revokeObjectURL(url);
       }
 
+      function getSyncRows() {
+        let state = getStoredState();
+        let visibleDays =
+          currentViewMode === "today" ? [getTodayLabel()] : days;
+        let rows = [];
+
+        for (let j = 0; j < visibleDays.length; j++) {
+          let day = visibleDays[j];
+          let dayIndex = days.indexOf(day);
+          for (let i = 0; i < schedule.length; i++) {
+            let period = schedule[i][0];
+            let type = schedule[i][1];
+            let key = day + "_" + period;
+            let id = "c" + i + dayIndex;
+            let record = records[id] || {};
+
+            let rowType = "";
+            let activity = "";
+            let check1 = "";
+            let check2 = "";
+            let check3 = "";
+
+            if (selfPeriods.includes(key)) {
+              rowType = "抽離活動";
+              let selectId = "s" + i + dayIndex;
+              let selectEl = document.getElementById(selectId);
+              activity =
+                (selectEl ? selectEl.value : "") ||
+                (state.activities && state.activities[selectId]) ||
+                "";
+            } else if (type == "打卡") {
+              rowType = "打卡";
+            } else {
+              rowType = "學習檢核";
+              let savedChecks = (state.checks && state.checks[id]) || {};
+              let c1 = document.getElementById(id + "_1");
+              let c2 = document.getElementById(id + "_2");
+              let c3 = document.getElementById(id + "_3");
+              check1 = c1
+                ? c1.checked
+                  ? "是"
+                  : "否"
+                : savedChecks.c1
+                  ? "是"
+                  : "否";
+              check2 = c2
+                ? c2.checked
+                  ? "是"
+                  : "否"
+                : savedChecks.c2
+                  ? "是"
+                  : "否";
+              check3 = c3
+                ? c3.checked
+                  ? "是"
+                  : "否"
+                : savedChecks.c3
+                  ? "是"
+                  : "否";
+            }
+
+            rows.push({
+              recordId: `${day}-${period}-${i}-${dayIndex}-${Date.now()}`,
+              savedAt: new Date().toISOString(),
+              day: day,
+              date: getDateTextForDay(day),
+              period: period,
+              type: rowType,
+              checkIn: record.in || "",
+              checkOut: record.out || "",
+              medicine: record.med || "",
+              check1: check1,
+              check2: check2,
+              check3: check3,
+              activity: activity,
+              viewMode: currentViewMode,
+            });
+          }
+        }
+
+        return rows;
+      }
+
+      async function syncToGoogleSheet() {
+        if (hasNoClassToday()) {
+          alert("今天是週末，無課堂資料可同步。");
+          return;
+        }
+
+        const syncBtn = document.getElementById("btnSync");
+        const originalText = syncBtn.innerText;
+        syncBtn.disabled = true;
+        syncBtn.innerText = "同步中...";
+
+        try {
+          const rows = getSyncRows();
+          const response = await fetch(GOOGLE_SHEET_WEB_APP_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              apiKey: GOOGLE_SHEET_API_KEY,
+              rows,
+            }),
+          });
+
+          const text = await response.text();
+          let result = {};
+          try {
+            result = JSON.parse(text);
+          } catch (e) {
+            result = { ok: false, raw: text };
+          }
+
+          if (response.ok && (result.ok || result.statusCode === 200)) {
+            alert(`同步成功，共 ${rows.length} 筆。`);
+          } else {
+            alert(
+              "同步失敗：請確認 Apps Script 已部署為可匿名存取，且 doPost 可接收 rows。\n" +
+                (result.error || text || response.status),
+            );
+          }
+        } catch (error) {
+          alert(
+            "同步失敗：可能是 Web App 權限或 CORS 設定問題，請檢查部署權限。\n" +
+              error,
+          );
+        } finally {
+          syncBtn.innerText = originalText;
+          updateSyncButtonState();
+        }
+      }
+
       // ⭐學習檢核
       function saveCheck(id, shouldSave = true) {
         let done =
@@ -532,6 +685,7 @@
             '<tr><th>訊息</th></tr><tr><td style="padding:20px;font-size:16px;">無課堂</td></tr>';
           updateViewButtons();
           updateExportButtonState();
+          updateSyncButtonState();
           return;
         }
 
@@ -601,6 +755,7 @@ ${medicineButton}
 
         updateViewButtons();
         updateExportButtonState();
+        updateSyncButtonState();
         loadFromLocalStorage();
       }
 
