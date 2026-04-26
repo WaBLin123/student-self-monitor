@@ -78,6 +78,10 @@
         color: white;
         padding: 8px 12px;
       }
+      .export:disabled {
+        background: #b8a9d6;
+        cursor: not-allowed;
+      }
       .view-btn {
         background: #9aa0a6;
         color: white;
@@ -125,14 +129,16 @@
       </div>
       <h2>📊 一週課表（視覺化＋時間）</h2>
       <div class="top-actions">
-        <button class="export" onclick="exportTableData()">匯出資料</button>
+        <button id="btnExport" class="export" onclick="exportTableData()">
+          匯出資料
+        </button>
       </div>
     </div>
 
     <table id="table"></table>
 
     <script>
-      const days = ["週一", "週二", "週三", "週四", "週五", "週六", "週日"];
+      const days = ["週一", "週二", "週三", "週四", "週五"];
 
       const schedule = [
         ["早自習", "打卡"],
@@ -170,8 +176,12 @@
       let currentViewMode = "week";
 
       // ⭐時間
+      function getNow() {
+        return new Date();
+      }
+
       function now() {
-        return new Date().toLocaleTimeString();
+        return getNow().toLocaleTimeString();
       }
 
       function saveToLocalStorage() {
@@ -221,11 +231,11 @@
 
       function getTodayLabel() {
         const dayMap = ["週日", "週一", "週二", "週三", "週四", "週五", "週六"];
-        return dayMap[new Date().getDay()];
+        return dayMap[getNow().getDay()];
       }
 
       function getDateTextForDay(dayLabel) {
-        const today = new Date();
+        const today = getNow();
         const todayJsDay = today.getDay();
         const mondayOffset = todayJsDay === 0 ? -6 : 1 - todayJsDay;
         const monday = new Date(today);
@@ -248,7 +258,7 @@
       function getVisibleDays() {
         if (currentViewMode === "today") {
           const today = getTodayLabel();
-          return days.includes(today) ? [today] : ["週一"];
+          return days.includes(today) ? [today] : [];
         }
         return days;
       }
@@ -263,6 +273,16 @@
         currentViewMode = mode;
         localStorage.setItem(VIEW_MODE_KEY, mode);
         renderTable();
+      }
+
+      function hasNoClassToday() {
+        return currentViewMode === "today" && getVisibleDays().length === 0;
+      }
+
+      function updateExportButtonState() {
+        const exportBtn = document.getElementById("btnExport");
+        if (!exportBtn) return;
+        exportBtn.disabled = hasNoClassToday();
       }
 
       function loadFromLocalStorage() {
@@ -365,6 +385,10 @@
         let state = getStoredState();
         let visibleDays =
           currentViewMode === "today" ? [getTodayLabel()] : days;
+        if (currentViewMode === "today" && !days.includes(visibleDays[0])) {
+          alert("今天是週末，無課堂資料可匯出。");
+          return;
+        }
         let rows = [
           [
             "星期",
@@ -503,6 +527,13 @@
 
       function renderTable() {
         let visibleDays = getVisibleDays();
+        if (currentViewMode === "today" && visibleDays.length === 0) {
+          table.innerHTML =
+            '<tr><th>訊息</th></tr><tr><td style="padding:20px;font-size:16px;">無課堂</td></tr>';
+          updateViewButtons();
+          updateExportButtonState();
+          return;
+        }
 
         // 表頭
         let header = "<tr><th>節次</th>";
@@ -569,6 +600,7 @@ ${medicineButton}
         }
 
         updateViewButtons();
+        updateExportButtonState();
         loadFromLocalStorage();
       }
 
