@@ -187,7 +187,7 @@
       const VIEW_MODE_KEY = "studentSelfMonitorViewMode_v1";
       const GOOGLE_SHEET_API_KEY = "YOUR_SIMPLE_KEY";
       const GOOGLE_SHEET_WEB_APP_URL =
-        "https://script.google.com/macros/s/AKfycbwxgnb69tZ8YydkYe679ew6u6keF1bRoEu1vo4dzcIFUljV_6C9HdBXSFLeH_DsmEAK/exec";
+        "https://script.google.com/macros/s/AKfycbzUUXNikvzgcXBcBkCsmuPZS0Kaf8LPIuHZ0VW-O8Ce4L7bvZ6MGU1u7hpIe0m4RDh8/exec";
       let currentViewMode = "week";
 
       // ⭐時間
@@ -268,6 +268,19 @@
 
       function getDayHeaderText(dayLabel) {
         return `${dayLabel} ${getDateTextForDay(dayLabel)}`;
+      }
+
+      function getWeekStartKey() {
+        const today = getNow();
+        const todayJsDay = today.getDay();
+        const mondayOffset = todayJsDay === 0 ? -6 : 1 - todayJsDay;
+        const monday = new Date(today);
+        monday.setHours(0, 0, 0, 0);
+        monday.setDate(today.getDate() + mondayOffset);
+        const yyyy = monday.getFullYear();
+        const mm = String(monday.getMonth() + 1).padStart(2, "0");
+        const dd = String(monday.getDate()).padStart(2, "0");
+        return `${yyyy}-${mm}-${dd}`;
       }
 
       function getVisibleDays() {
@@ -579,7 +592,7 @@
             }
 
             rows.push({
-              recordId: `${day}-${period}-${i}-${dayIndex}-${Date.now()}`,
+              recordId: `${getWeekStartKey()}-${day}-${period}`,
               savedAt: new Date().toISOString(),
               day: day,
               date: getDateTextForDay(day),
@@ -615,7 +628,7 @@
           const rows = getSyncRows();
           const response = await fetch(GOOGLE_SHEET_WEB_APP_URL, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "text/plain;charset=utf-8" },
             body: JSON.stringify({
               apiKey: GOOGLE_SHEET_API_KEY,
               rows,
