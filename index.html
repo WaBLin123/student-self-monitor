@@ -229,7 +229,7 @@
         "studentSelfMonitorGoogleApiKey_v1";
       let GOOGLE_SHEET_API_KEY = "YOUR_SIMPLE_KEY";
       const GOOGLE_SHEET_WEB_APP_URL =
-        "https://script.google.com/macros/s/AKfycbzJ-D_QPz-XOA8cNiGzGi_uU-IsUkWiriSsfHk2uMoG_7-yu3yrt3iM9KG_nYqi-tC5/exec";
+        "https://script.google.com/macros/s/AKfycbz4RSPHB-cZ4V5_dRRwI1KpQ7MUmsM1ywKT13eeQYxq6j87iSbnN7ZqI3ZjklFbDwZY/exec";
       const AUTO_SYNC_DELAY_MS = 3000;
       let currentViewMode = "week";
       let autoSyncTimerId = null;
@@ -259,15 +259,20 @@
             let id = "c" + i + j;
 
             if (selfPeriods.includes(key)) {
-              let selectEl = document.getElementById("s" + i + j);
-              activities["s" + i + j] = selectEl ? selectEl.value : "";
+              let p1 = document.getElementById(id + "_p1");
+              let p2 = document.getElementById(id + "_p2");
+              if (p1 && p2) {
+                checks[id] = {
+                  p1: p1.checked,
+                  p2: p2.checked,
+                };
+              }
             } else {
-              let c1 = document.getElementById(id + "_1");
               let c2 = document.getElementById(id + "_2");
               let c3 = document.getElementById(id + "_3");
-              if (c1 && c2 && c3) {
+              if (c2 && c3) {
                 checks[id] = {
-                  c1: c1.checked,
+                  c1: false,
                   c2: c2.checked,
                   c3: c3.checked,
                 };
@@ -417,24 +422,17 @@
               let id = "c" + i + j;
 
               if (selfPeriods.includes(key)) {
-                let selectId = "s" + i + j;
-                let selectEl = document.getElementById(selectId);
-                if (
-                  selectEl &&
-                  state.activities &&
-                  typeof state.activities[selectId] === "string"
-                ) {
-                  selectEl.value = state.activities[selectId];
-                  if (selectEl.value) {
-                    selectEl.parentElement.classList.add("pullout");
-                  }
+                let p1 = document.getElementById(id + "_p1");
+                let p2 = document.getElementById(id + "_p2");
+                if (p1 && p2 && state.checks && state.checks[id]) {
+                  p1.checked = !!state.checks[id].p1;
+                  p2.checked = !!state.checks[id].p2;
+                  savePulloutCheck(id, false);
                 }
               } else {
-                let c1 = document.getElementById(id + "_1");
                 let c2 = document.getElementById(id + "_2");
                 let c3 = document.getElementById(id + "_3");
-                if (c1 && c2 && c3 && state.checks && state.checks[id]) {
-                  c1.checked = !!state.checks[id].c1;
+                if (c2 && c3 && state.checks && state.checks[id]) {
                   c2.checked = !!state.checks[id].c2;
                   c3.checked = !!state.checks[id].c3;
                   saveCheck(id, false);
@@ -515,12 +513,11 @@
             "簽到",
             "簽退",
             "服藥",
-            "學習完成",
-            "未玩鬧",
-            "遵守教師指令",
-            "活動",
+            "完成規劃表活動",
+            "未離開學務處",
           ],
         ];
+        let dataRows = [];
 
         for (let j = 0; j < visibleDays.length; j++) {
           let day = visibleDays[j];
@@ -539,45 +536,34 @@
             let check3 = "";
 
             if (selfPeriods.includes(key)) {
-              rowType = "抽離活動";
-              let selectId = "s" + i + dayIndex;
-              let selectEl = document.getElementById(selectId);
-              activity =
-                (selectEl ? selectEl.value : "") ||
-                (state.activities && state.activities[selectId]) ||
-                "";
+              rowType = "學務處檢核";
+              let savedChecks = (state.checks && state.checks[id]) || {};
+              let p1 = document.getElementById(id + "_p1");
+              let p2 = document.getElementById(id + "_p2");
+              check1 = p1
+                ? p1.checked
+                  ? "是"
+                  : "否"
+                : savedChecks.p1
+                  ? "是"
+                  : "否";
+              check2 = p2
+                ? p2.checked
+                  ? "是"
+                  : "否"
+                : savedChecks.p2
+                  ? "是"
+                  : "否";
             } else if (type == "打卡") {
               rowType = "打卡";
             } else {
               rowType = "學習檢核";
-              let savedChecks = (state.checks && state.checks[id]) || {};
-              let c1 = document.getElementById(id + "_1");
-              let c2 = document.getElementById(id + "_2");
-              let c3 = document.getElementById(id + "_3");
-              check1 = c1
-                ? c1.checked
-                  ? "是"
-                  : "否"
-                : savedChecks.c1
-                  ? "是"
-                  : "否";
-              check2 = c2
-                ? c2.checked
-                  ? "是"
-                  : "否"
-                : savedChecks.c2
-                  ? "是"
-                  : "否";
-              check3 = c3
-                ? c3.checked
-                  ? "是"
-                  : "否"
-                : savedChecks.c3
-                  ? "是"
-                  : "否";
+              check1 = "";
+              check2 = "";
+              check3 = "";
             }
 
-            rows.push([
+            const exportRow = [
               i === 0 ? getDayHeaderText(day) : "",
               period,
               rowType,
@@ -586,10 +572,26 @@
               record.med || "",
               check1,
               check2,
-              check3,
-              activity,
-            ]);
+            ];
+
+            const hasData =
+              rowType === "打卡"
+                ? !!(record.in || record.out || record.med)
+                : rowType === "學檢核"
+                  ? check1 === "是" || check2 === "是" || check3 === "是"
+                  : false;
+
+            if (hasData) {
+              dataRows.push(exportRow);
+            }
           }
+        }
+
+        rows = rows.concat(dataRows);
+
+        if (dataRows.length === 0) {
+          alert("目前沒有可匯出的有效資料。");
+          return;
         }
 
         let csv = rows
@@ -637,42 +639,31 @@
             let check3 = "";
 
             if (selfPeriods.includes(key)) {
-              rowType = "抽離活動";
-              let selectId = "s" + i + dayIndex;
-              let selectEl = document.getElementById(selectId);
-              activity =
-                (selectEl ? selectEl.value : "") ||
-                (state.activities && state.activities[selectId]) ||
-                "";
+              rowType = "學務處檢核";
+              let savedChecks = (state.checks && state.checks[id]) || {};
+              let p1 = document.getElementById(id + "_p1");
+              let p2 = document.getElementById(id + "_p2");
+              check1 = p1
+                ? p1.checked
+                  ? "是"
+                  : "否"
+                : savedChecks.p1
+                  ? "是"
+                  : "否";
+              check2 = p2
+                ? p2.checked
+                  ? "是"
+                  : "否"
+                : savedChecks.p2
+                  ? "是"
+                  : "否";
             } else if (type == "打卡") {
               rowType = "打卡";
             } else {
               rowType = "學習檢核";
-              let savedChecks = (state.checks && state.checks[id]) || {};
-              let c1 = document.getElementById(id + "_1");
-              let c2 = document.getElementById(id + "_2");
-              let c3 = document.getElementById(id + "_3");
-              check1 = c1
-                ? c1.checked
-                  ? "是"
-                  : "否"
-                : savedChecks.c1
-                  ? "是"
-                  : "否";
-              check2 = c2
-                ? c2.checked
-                  ? "是"
-                  : "否"
-                : savedChecks.c2
-                  ? "是"
-                  : "否";
-              check3 = c3
-                ? c3.checked
-                  ? "是"
-                  : "否"
-                : savedChecks.c3
-                  ? "是"
-                  : "否";
+              check1 = "";
+              check2 = "";
+              check3 = "";
             }
 
             rows.push({
@@ -777,7 +768,6 @@
       // ⭐學習檢核
       function saveCheck(id, shouldSave = true) {
         let done =
-          document.getElementById(id + "_1").checked &&
           document.getElementById(id + "_2").checked &&
           document.getElementById(id + "_3").checked;
 
@@ -796,10 +786,23 @@
       }
 
       // ⭐活動
-      function saveActivity(id) {
-        document.getElementById(id).parentElement.classList.add("pullout");
-        saveToLocalStorage();
-        scheduleAutoSync();
+      function savePulloutCheck(id, shouldSave = true) {
+        let done =
+          document.getElementById(id + "_p1").checked &&
+          document.getElementById(id + "_p2").checked;
+
+        if (done) {
+          document.getElementById(id).parentElement.classList.add("normal");
+          document.getElementById(id).parentElement.classList.remove("warning");
+        } else {
+          document.getElementById(id).parentElement.classList.remove("normal");
+          document.getElementById(id).parentElement.classList.add("warning");
+        }
+
+        if (shouldSave) {
+          saveToLocalStorage();
+          scheduleAutoSync();
+        }
       }
 
       function onCheckInputChange() {
@@ -853,16 +856,10 @@
 
             // ⭐抽離判斷
             if (selfPeriods.includes(key)) {
-              cellClass = "pullout";
-              row += `<td class="${cellClass}">
-<select id="s${i}${dayIndex}" onchange="onSelectInputChange()">
-<option value="">選擇</option>
-<option>寫評量</option>
-<option>織圍巾</option>
-<option>晤談</option>
-<option>放空</option>
-</select>
-<button onclick="saveActivity('s${i}${dayIndex}')">✔</button>
+              row += `<td class="pullout">
+<input type="checkbox" id="${id}_p1" onchange="onCheckInputChange()">完成教學規劃表活動<br>
+<input type="checkbox" id="${id}_p2" onchange="onCheckInputChange()">未離開學務處<br>
+<button onclick="savePulloutCheck('${id}')">✔</button>
 </td>`;
             } else if (type == "打卡") {
               let medicineButton = isMedicinePeriod
@@ -877,12 +874,7 @@ ${medicineButton}
 </div>
 </td>`;
             } else {
-              row += `<td class="${cellClass}">
-<input type="checkbox" id="${id}_1" onchange="onCheckInputChange()">完成課堂學習活動<br>
-<input type="checkbox" id="${id}_2" onchange="onCheckInputChange()">未與同學玩鬧<br>
-<input type="checkbox" id="${id}_3" onchange="onCheckInputChange()">遵守教師指令<br>
-<button onclick="saveCheck('${id}')">✔</button>
-</td>`;
+              row += `<td class="${cellClass}"></td>`;
             }
           }
 
