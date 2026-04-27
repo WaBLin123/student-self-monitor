@@ -195,15 +195,15 @@
       const schedule = [
         ["早自習", "打卡"],
         ["第一節", "學習"],
-        ["下課", "打卡"],
+        ["第一節下課", "打卡"],
         ["第二節", "學習"],
-        ["下課", "打卡"],
+        ["第二節下課", "打卡"],
         ["第三節", "學習"],
-        ["下課", "打卡"],
+        ["第三節下課", "打卡"],
         ["第四節", "學習"],
         ["午餐/午休", "打卡"],
         ["第五節", "學習"],
-        ["下課", "打卡"],
+        ["第五節下課", "打卡"],
         ["第六節", "學習"],
         ["掃地", "打卡"],
         ["第七節", "學習"],
@@ -227,9 +227,11 @@
       const VIEW_MODE_KEY = "studentSelfMonitorViewMode_v1";
       const GOOGLE_SHEET_API_KEY_STORAGE_KEY =
         "studentSelfMonitorGoogleApiKey_v1";
+      const APP_STORAGE_VERSION_KEY = "studentSelfMonitorStorageVersion";
+      const APP_STORAGE_VERSION = "2";
       let GOOGLE_SHEET_API_KEY = "YOUR_SIMPLE_KEY";
       const GOOGLE_SHEET_WEB_APP_URL =
-        "https://script.google.com/macros/s/AKfycbz4RSPHB-cZ4V5_dRRwI1KpQ7MUmsM1ywKT13eeQYxq6j87iSbnN7ZqI3ZjklFbDwZY/exec";
+        "https://script.google.com/macros/s/AKfycbxxCSxTPm_5-kCqS_6g924NCD_5SEY4excgtnRWLF7nnyXCjgrl83UEWTqKnwsF2tUe/exec";
       const AUTO_SYNC_DELAY_MS = 3000;
       let currentViewMode = "week";
       let autoSyncTimerId = null;
@@ -293,6 +295,16 @@
         } catch (e) {
           return { records: {}, checks: {}, activities: {} };
         }
+      }
+
+      function ensureStorageVersion() {
+        const storedVersion = localStorage.getItem(APP_STORAGE_VERSION_KEY);
+        if (storedVersion === APP_STORAGE_VERSION) return;
+
+        localStorage.removeItem(STORAGE_KEY);
+        localStorage.removeItem(VIEW_MODE_KEY);
+        localStorage.removeItem(GOOGLE_SHEET_API_KEY_STORAGE_KEY);
+        localStorage.setItem(APP_STORAGE_VERSION_KEY, APP_STORAGE_VERSION);
       }
 
       function getTodayLabel() {
@@ -673,6 +685,7 @@
               date: getDateTextForDay(day),
               period: period,
               type: rowType,
+              forceSync: true,
               checkIn: record.in || "",
               checkOut: record.out || "",
               medicine: record.med || "",
@@ -887,6 +900,8 @@ ${medicineButton}
         updateSyncButtonState();
         loadFromLocalStorage();
       }
+
+      ensureStorageVersion();
 
       const savedViewMode = localStorage.getItem(VIEW_MODE_KEY);
       if (savedViewMode === "today" || savedViewMode === "week") {
