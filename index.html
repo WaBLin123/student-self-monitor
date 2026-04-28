@@ -228,10 +228,10 @@
       const GOOGLE_SHEET_API_KEY_STORAGE_KEY =
         "studentSelfMonitorGoogleApiKey_v1";
       const APP_STORAGE_VERSION_KEY = "studentSelfMonitorStorageVersion";
-      const APP_STORAGE_VERSION = "2";
+      const APP_STORAGE_VERSION = "2.1";
       let GOOGLE_SHEET_API_KEY = "YOUR_SIMPLE_KEY";
       const GOOGLE_SHEET_WEB_APP_URL =
-        "https://script.google.com/macros/s/AKfycbxxCSxTPm_5-kCqS_6g924NCD_5SEY4excgtnRWLF7nnyXCjgrl83UEWTqKnwsF2tUe/exec";
+        "https://script.google.com/macros/s/AKfycbzFG7zpkvfuQ3KjMMYynxCMbtUeu7tIK7FNrab9uQpYbzJ0KH3CLiu9NBx92aFATfJP/exec";
       const AUTO_SYNC_DELAY_MS = 3000;
       let currentViewMode = "week";
       let autoSyncTimerId = null;
@@ -520,6 +520,7 @@
         let rows = [
           [
             "星期",
+            "日期",
             "節次",
             "類型",
             "簽到",
@@ -577,6 +578,7 @@
 
             const exportRow = [
               i === 0 ? getDayHeaderText(day) : "",
+              getDateTextForDay(day),
               period,
               rowType,
               record.in || "",
